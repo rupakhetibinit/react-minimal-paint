@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { createContext, useLayoutEffect, useRef, useState } from 'react';
 import rough from 'roughjs';
 import type { Drawable } from 'roughjs/bin/core';
 import './App.css';
@@ -35,11 +35,15 @@ function App() {
 	const [drawing, setDrawing] = useState(false);
 	const [elementType, setElementType] = useState<string>('line');
 	const firstRun = useRef(true);
+	let canvasContext = useRef<CanvasRenderingContext2D | null>(null);
 	useLayoutEffect(() => {
 		const canvas = document.getElementById('canvas') as HTMLCanvasElement;
 		const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
-		const roughCanvas = rough.canvas(canvas);
+		// canvasContext.current?.clearRect(0, 0, window.innerWidth, innerHeight);
 		ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+		// canvasContext.current = ctx;
+		const roughCanvas = rough.canvas(canvas);
+
 		// if (firstRun.current) {
 		// 	const rect = generator.rectangle(10, 10, 100, 100);
 		// 	roughCanvas.draw(rect);
@@ -87,6 +91,7 @@ function App() {
 	return (
 		<>
 			<div>
+				<button onClick={() => setElements([])}>Clear canvas</button>
 				<input
 					type='radio'
 					onChange={() => setElementType('line')}
@@ -99,16 +104,16 @@ function App() {
 					onChange={() => setElementType('rectangle')}
 					checked={elementType === 'rectangle'}></input>
 				<label htmlFor='rectangle'>Rectangle</label>
+				<canvas
+					width={window.innerWidth}
+					height={window.innerHeight}
+					id='canvas'
+					onMouseDown={onMouseDown}
+					onMouseMove={onMouseMove}
+					onMouseUp={onMouseUp}>
+					Canvas
+				</canvas>
 			</div>
-			<canvas
-				width={window.innerWidth}
-				height={window.innerHeight}
-				id='canvas'
-				onMouseDown={onMouseDown}
-				onMouseMove={onMouseMove}
-				onMouseUp={onMouseUp}>
-				Canvas
-			</canvas>
 		</>
 	);
 }
