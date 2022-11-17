@@ -6,6 +6,7 @@ import './App.css';
 const generator = rough.generator();
 
 function createElement(
+	id: number,
 	x1: any,
 	y1: any,
 	x2: any,
@@ -19,8 +20,35 @@ function createElement(
 		roughElement = generator.rectangle(x1, y1, x2 - x1, y2 - y1);
 	}
 
-	return { x1, y1, x2, y2, roughElement };
+	return { id, x1, y1, x2, y2, roughElement, elementType };
 }
+
+function getElementAtPosition(x: any, y: any, elements: ElementState[]) {
+	return elements.find((element: any) => isWithinElement(x, y, element));
+}
+
+function isWithinElement(x: any, y: any, element: ElementState) {
+	const { elementType, x1, y1, x2, y2 } = element;
+	if (elementType === 'rectangle') {
+		const minX = Math.min(x1, x2);
+		const maxX = Math.max(x1, x2);
+		const minY = Math.min(y1, y2);
+		const maxY = Math.max(y1, y2);
+		return x >= minX && x <= maxX && y >= minY && y <= maxY;
+	} else {
+		const a = { x: x1, y: y1 };
+		const b = { x: x2, y: y2 };
+		const c = { x, y };
+		console.log({ c });
+		const offset = distance(a, b) - distance(a, c) - distance(b, c);
+		console.log(offset);
+		console.log(Math.abs(offset));
+		return Math.abs(offset) < 5;
+	}
+}
+
+const distance = (a: any, b: any) =>
+	Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
 
 interface ElementState {
 	x1: any;
@@ -28,12 +56,17 @@ interface ElementState {
 	x2: any;
 	y2: any;
 	roughElement: Drawable;
+	elementType: string;
+	id: number;
 }
 
 function App() {
 	const [elements, setElements] = useState<ElementState[] | []>([]);
-	const [drawing, setDrawing] = useState(false);
-	const [elementType, setElementType] = useState<string>('line');
+	const [action, setAction] = useState('none');
+	const [tool, setTool] = useState<string>('line');
+	const [selectedElement, setSelectedElement] = useState<ElementState | null>(
+		null
+	);
 	const firstRun = useRef(true);
 	let canvasContext = useRef<CanvasRenderingContext2D | null>(null);
 	useLayoutEffect(() => {
@@ -42,7 +75,12 @@ function App() {
 		// canvasContext.current?.clearRect(0, 0, window.innerWidth, innerHeight);
 		ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
 		// canvasContext.current = ctx;
-		const roughCanvas = rough.canvas(canvas);
+		const roughCanvas = rough.canvas(canvas, {
+			options: {
+				roughness: 0,
+				strokeLineDash: [1, 1],
+			},
+		});
 
 		// if (firstRun.current) {
 		// 	const rect = generator.rectangle(10, 10, 100, 100);
@@ -55,37 +93,73 @@ function App() {
 	}),
 		[elements];
 
+	const updateElement = (
+		id: number,
+		x1: any,
+		y1: any,
+		x2: any,
+		y2: any,
+		type: string
+	) => {
+		const updatedElement = createElement(id, x1, y1, x2, y2, type);
+		const elementsCopy = [...elements];
+		elementsCopy[id] = updatedElement;
+		setElements(elementsCopy);
+	};
+
 	const onMouseDown = (event: any) => {
-		setDrawing(true);
 		const { clientX, clientY } = event;
-		console.log('mouse down event', clientX, clientY);
-		const element = createElement(
-			clientX,
-			clientY,
-			clientX,
-			clientY,
-			elementType
-		);
-		setElements((prev: any) => [...prev, element]);
+		if (tool === 'selection') {
+			const element = getElementAtPosition(clientX, clientY, elements);
+			console.log(element);
+			if (element !== undefined) {
+				setSelectedElement(element);
+				setAction('moving');
+			}
+		} else {
+			const id = elements.length;
+			console.log('mouse down event', clientX, clientY);
+			const element = createElement(
+				id,
+				clientX,
+				clientY,
+				clientX,
+				clientY,
+				tool
+			);
+			setElements((prev: any) => [...prev, element]);
+			setAction('drawing');
+		}
 	};
 
 	const onMouseMove = (event: any) => {
-		if (!drawing) {
-			return;
-		}
 		const { clientX, clientY } = event;
-		console.log(clientX, clientY);
-		const index = elements.length - 1;
-		const { x1, y1 } = elements[index];
-		const updatedElement = createElement(x1, y1, clientX, clientY, elementType);
-
-		const elementsCopy = [...elements];
-		elementsCopy[index] = updatedElement;
-		setElements([...elementsCopy]);
+		if (action === 'drawing') {
+			console.log(clientX, clientY);
+			const index = elements.length - 1;
+			const { x1, y1 } = elements[index];
+			updateElement(index, x1, y1, clientX, clientY, tool);
+		} else if (action === 'moving') {
+			const { id, x1, x2, y1, y2, elementType } =
+				selectedElement as ElementState;
+			if (elementType === 'rectangle') {
+				const width = x2 - x1;
+				const height = y2 - y1;
+				updateElement(
+					id,
+					clientX,
+					clientY,
+					clientX + width,
+					clientY + height,
+					tool
+				);
+			}
+		}
 	};
 
 	const onMouseUp = () => {
-		setDrawing(false);
+		setAction('none');
+		setSelectedElement(null);
 	};
 
 	return (
@@ -94,15 +168,21 @@ function App() {
 				<button onClick={() => setElements([])}>Clear canvas</button>
 				<input
 					type='radio'
-					onChange={() => setElementType('line')}
+					onChange={() => setTool('selection')}
+					id='selection'
+					checked={tool === 'selection'}></input>
+				<label htmlFor='selection'>Selection</label>
+				<input
+					type='radio'
+					onChange={() => setTool('line')}
 					id='line'
-					checked={elementType === 'line'}></input>
+					checked={tool === 'line'}></input>
 				<label htmlFor='line'>Line</label>
 				<input
 					type='radio'
 					id='rectangle'
-					onChange={() => setElementType('rectangle')}
-					checked={elementType === 'rectangle'}></input>
+					onChange={() => setTool('rectangle')}
+					checked={tool === 'rectangle'}></input>
 				<label htmlFor='rectangle'>Rectangle</label>
 				<canvas
 					width={window.innerWidth}
